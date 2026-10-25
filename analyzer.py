@@ -348,6 +348,29 @@ def calculate_statistics(df, mapping=None):
                 }
     stats['subject_stats'] = subject_stats
 
+    # Identify top and lowest performing subjects
+    if subject_stats:
+        top_sub = max(subject_stats.items(), key=lambda x: x[1]['mean'])
+        lowest_sub = min(subject_stats.items(), key=lambda x: x[1]['mean'])
+        stats['top_subject'] = top_sub[0].replace('_Score', '').replace('_', ' ')
+        stats['top_subject_avg'] = top_sub[1]['mean']
+        stats['lowest_subject'] = lowest_sub[0].replace('_Score', '').replace('_', ' ')
+        stats['lowest_subject_avg'] = lowest_sub[1]['mean']
+    else:
+        stats['top_subject'] = None
+        stats['lowest_subject'] = None
+
+    # Analytical insight statement (from original summary report)
+    if stats.get('has_scores') and stats.get('top_subject'):
+        at_risk_msg = f"{stats['at_risk_count']} students are classified as at-risk (attendance < 75% and average score < 60%)." if stats.get('at_risk_count') is not None else ""
+        stats['insight_statement'] = (
+            f"Analysis of {stats['total_records']} student records reveals an overall performance pass rate of {stats.get('pass_percentage', 'N/A')}%. "
+            f"{stats['top_subject']} is the top-performing subject with an average of {stats['top_subject_avg']}, while {stats['lowest_subject']} represents the lowest average ({stats['lowest_subject_avg']}). "
+            f"{at_risk_msg}"
+        )
+    else:
+        stats['insight_statement'] = f"Dataset contains {stats['total_records']} records across {stats['total_columns']} columns ({stats['numerical_columns_count']} numerical, {stats['categorical_columns_count']} categorical)."
+
     # Descriptive statistics dataframe summary (mean, std, min, 25%, 50%, 75%, max)
     if numeric_cols:
         desc_df = df[numeric_cols].describe().round(2).T

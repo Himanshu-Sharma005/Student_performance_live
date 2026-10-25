@@ -52,15 +52,19 @@ def get_session_file():
 @app.route('/')
 def index():
     filepath = get_session_file()
-    if not filepath:
-        # No dataset loaded yet: render upload homepage
-        return render_template('index.html', has_data=False)
+    is_sample = False
+    filename = session.get('original_filename')
 
-    # Load raw data from session file
+    # If no custom file uploaded yet, default to sample_students.csv so dashboard is immediately live
+    if not filepath or not os.path.exists(filepath):
+        filepath = SAMPLE_FILE
+        filename = 'sample_students.csv (Demo Dataset)'
+        is_sample = True
+
+    # Load raw data
     df_raw, err = analyzer.load_csv_data(filepath)
     if err or df_raw is None:
         flash(err or "Failed to read data file.", "danger")
-        session.pop('file_id', None)
         return render_template('index.html', has_data=False)
 
     # Retrieve preprocessing options from session (or set defaults)
@@ -99,11 +103,10 @@ def index():
         'total_cols': len(df_cleaned.columns)
     }
 
-    filename = session.get('original_filename', 'uploaded_dataset.csv')
-
     return render_template(
         'index.html',
         has_data=True,
+        is_sample=is_sample,
         filename=filename,
         preproc_summary=preproc_summary,
         remove_duplicates=remove_duplicates,
@@ -231,8 +234,8 @@ def update_columns():
 
 @app.route('/download')
 def download_cleaned_data():
-    filepath = get_session_file()
-    if not filepath:
+    filepath = get_session_file() or SAMPLE_FILE
+    if not filepath or not os.path.exists(filepath):
         flash("No dataset available for download.", "warning")
         return redirect(url_for('index'))
 
