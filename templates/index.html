@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Performance Analyzer</title>
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <!-- ================= NAVBAR ================= -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="{{ url_for('index') }}">
+                <span class="brand-icon"><i class="bi bi-mortarboard-fill"></i></span>
+                <span>Student Performance Analyzer</span>
+            </a>
+
+            <div class="d-flex align-items-center gap-2 ms-auto">
+                {% if has_data %}
+                <span class="badge text-bg-secondary d-none d-md-inline-flex align-items-center gap-1 py-2 px-3">
+                    <i class="bi bi-file-earmark-spreadsheet"></i> {{ filename }}
+                </span>
+                <a href="{{ url_for('download_cleaned_data') }}" class="btn btn-sm btn-success d-inline-flex align-items-center gap-1">
+                    <i class="bi bi-download"></i> <span class="d-none d-sm-inline">Download Cleaned CSV</span>
+                </a>
+                <button type="button" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1" data-bs-toggle="modal" data-bs-target="#columnMappingModal">
+                    <i class="bi bi-sliders"></i> <span class="d-none d-sm-inline">Column Settings</span>
+                </button>
+                <a href="{{ url_for('reset') }}" class="btn btn-sm btn-outline-danger d-inline-flex align-items-center gap-1" title="Upload another CSV">
+                    <i class="bi bi-arrow-counterclockwise"></i> <span class="d-none d-sm-inline">New Dataset</span>
+                </a>
+                {% else %}
+                <a href="{{ url_for('load_sample') }}" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
+                    <i class="bi bi-play-circle-fill"></i> Try Sample Data
+                </a>
+                {% endif %}
+
+                <!-- Dark / Light Theme Toggle -->
+                <button id="themeToggleBtn" class="btn btn-sm btn-outline-secondary" type="button" title="Toggle theme">
+                    <i id="themeIcon" class="bi bi-moon-stars-fill"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ================= MAIN CONTAINER ================= -->
+    <main class="container-fluid px-4 py-4">
+
+        <!-- Flash Alert Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show d-flex align-items-center gap-2 shadow-sm" role="alert">
+                        <i class="bi {% if category == 'success' %}bi-check-circle-fill{% elif category == 'danger' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %}"></i>
+                        <div>{{ message }}</div>
+                        <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if not has_data %}
+        <!-- ================= UPLOAD HOMEPAGE ================= -->
+        <div class="row justify-content-center py-4">
+            <div class="col-lg-8 col-xl-7">
+                <div class="hero-card mb-4">
+                    <div class="upload-icon-wrapper">
+                        <i class="bi bi-cloud-arrow-up-fill"></i>
+                    </div>
+                    <h2 class="fw-bold mb-2">Upload Student Performance CSV</h2>
+                    <p class="text-muted mb-4">
+                        Upload your student records CSV to automatically preprocess data with Pandas &amp; NumPy, compute academic statistics, and generate interactive visual dashboards.
+                    </p>
+
+                    <!-- Drag & Drop Upload Form -->
+                    <form action="{{ url_for('upload_file') }}" method="POST" enctype="multipart/form-data" id="uploadForm">
+                        <div class="upload-dropzone mb-3" id="dropzone">
+                            <i class="bi bi-filetype-csv fs-1 text-primary mb-2 d-block"></i>
+                            <h5 class="fw-semibold mb-1">Drag and drop your CSV file here</h5>
+                            <p class="text-muted small mb-3">Accepts .csv files up to 10 MB with any column structure</p>
+                            
+                            <label for="csvFileInput" class="btn btn-primary px-4 py-2 cursor-pointer">
+                                <i class="bi bi-folder2-open me-1"></i> Browse Files
+                            </label>
+                            <input type="file" name="csv_file" id="csvFileInput" class="d-none" accept=".csv" required>
+                            <div id="selectedFileName" class="mt-2 text-primary fw-medium small"></div>
+                        </div>
+
+                        <div class="d-flex justify-content-center gap-3">
+                            <button type="submit" class="btn btn-primary px-4" id="submitBtn" disabled>
+                                <i class="bi bi-bar-chart-line me-1"></i> Analyze Uploaded CSV
+                            </button>
+                            <a href="{{ url_for('load_sample') }}" class="btn btn-outline-secondary px-4">
+                                <i class="bi bi-magic me-1"></i> Load Demo Sample CSV
+                            </a>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Features Highlight Grid -->
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="dash-card p-3 text-center">
+                            <i class="bi bi-funnel text-primary fs-3 mb-2"></i>
+                            <h6 class="fw-bold mb-1">Data Preprocessing</h6>
+                            <p class="text-muted small mb-0">Automatic deduplication, missing values handling with mean/median, and type conversion.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="dash-card p-3 text-center">
+                            <i class="bi bi-cpu text-success fs-3 mb-2"></i>
+                            <h6 class="fw-bold mb-1">Smart Analytics</h6>
+                            <p class="text-muted small mb-0">Calculates class averages, pass rates, at-risk classifications, and attendance correlations.</p>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="dash-card p-3 text-center">
+                            <i class="bi bi-pie-chart text-purple fs-3 mb-2"></i>
+                            <h6 class="fw-bold mb-1">Visual Charts</h6>
+                            <p class="text-muted small mb-0">Subject averages, score distributions, attendance analysis, and correlation heatmaps.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- ================= ACTIVE DASHBOARD ================= -->
+
+        <!-- Section 1: Preprocessing Summary & Controls -->
+        <div class="row mb-4" id="preprocessing-section">
+            <div class="col-12">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h5 class="dash-card-title">
+                            <i class="bi bi-gear-wide-connected text-primary"></i> Data Preprocessing Pipeline Summary
+                        </h5>
+                        <div class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#preprocSettingsCollapse">
+                                <i class="bi bi-sliders me-1"></i> Adjust Preprocessing Options
+                            </button>
+                        </div>
+                    </div>
+                    <div class="dash-card-body">
+                        <!-- Before & After Comparison Pills -->
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <div class="preproc-pill">
+                                <span class="text-muted">Total Rows:</span>
+                                <strong>{{ preproc_summary.initial_rows }}</strong>
+                                <i class="bi bi-arrow-right text-muted mx-1"></i>
+                                <span class="badge text-bg-primary">{{ preproc_summary.final_rows }}</span>
+                            </div>
+                            <div class="preproc-pill">
+                                <span class="text-muted">Columns:</span>
+                                <strong>{{ preproc_summary.initial_cols }}</strong>
+                            </div>
+                            <div class="preproc-pill">
+                                <span class="text-muted">Duplicates Detected:</span>
+                                <span class="badge {% if preproc_summary.duplicates_removed > 0 %}text-bg-warning{% else %}text-bg-secondary{% endif %}">
+                                    {{ preproc_summary.initial_duplicates }}
+                                </span>
+                                {% if preproc_summary.remove_duplicates_flag %}
+                                <span class="badge text-bg-success ms-1">({{ preproc_summary.duplicates_removed }} removed)</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary ms-1">(Retained)</span>
+                                {% endif %}
+                            </div>
+                            <div class="preproc-pill">
+                                <span class="text-muted">Missing Values:</span>
+                                <strong>{{ preproc_summary.initial_missing }}</strong>
+                                <i class="bi bi-arrow-right text-muted mx-1"></i>
+                                <span class="badge {% if preproc_summary.final_missing == 0 %}text-bg-success{% else %}text-bg-warning{% endif %}">
+                                    {{ preproc_summary.final_missing }}
+                                </span>
+                                <span class="small text-muted ms-1">(Strategy: {{ preproc_summary.missing_strategy|title }})</span>
+                            </div>
+                        </div>
+
+                        <!-- Preprocessing Steps Audit List -->
+                        <div class="p-3 rounded bg-body-tertiary border mb-3">
+                            <h6 class="fw-bold mb-2 small text-uppercase text-muted">Applied Preprocessing Actions</h6>
+                            <ul class="step-list">
+                                {% for step in preproc_summary.steps_applied %}
+                                <li class="step-item">{{ step }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+
+                        <!-- Preprocessing Controls Collapse Form -->
+                        <div class="collapse" id="preprocSettingsCollapse">
+                            <form action="{{ url_for('update_preprocessing') }}" method="POST" class="p-3 rounded border bg-body-tertiary">
+                                <h6 class="fw-bold mb-3">Configure Data Preprocessing</h6>
+                                <div class="row g-3 align-items-center">
+                                    <div class="col-md-5">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" name="remove_duplicates" id="removeDuplicatesCheck" {% if remove_duplicates %}checked{% endif %}>
+                                            <label class="form-check-label fw-medium" for="removeDuplicatesCheck">
+                                                Remove Duplicate Rows
+                                            </label>
+                                        </div>
+                                        <small class="text-muted d-block">Identifies and drops identical rows across all columns.</small>
+                                    </div>
+                                    <div class="col-md-5">
+                                        <label for="missingStrategySelect" class="form-label fw-medium small mb-1">Missing Numerical Values Strategy</label>
+                                        <select class="form-select form-select-sm" name="missing_strategy" id="missingStrategySelect">
+                                            <option value="none" {% if missing_strategy == 'none' %}selected{% endif %}>Leave missing values unchanged</option>
+                                            <option value="mean" {% if missing_strategy == 'mean' %}selected{% endif %}>Fill with Column Mean</option>
+                                            <option value="median" {% if missing_strategy == 'median' %}selected{% endif %}>Fill with Column Median</option>
+                                            <option value="drop" {% if missing_strategy == 'drop' %}selected{% endif %}>Drop rows with missing values</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2 text-md-end">
+                                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Apply Settings
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Summary KPI Cards -->
+        <div class="row g-3 mb-4" id="analytics-section">
+            <!-- Total Records -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-primary">
+                    <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">Total Records</div>
+                        <div class="stat-value">{{ stats.total_records }}</div>
+                        <div class="stat-sub">{{ stats.student_count }} Unique IDs</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Average Marks / Score -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-success">
+                    <div class="stat-icon"><i class="bi bi-award-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">Average Score</div>
+                        <div class="stat-value">
+                            {% if stats.has_scores %}{{ stats.avg_score }}{% else %}<span class="fs-4 text-muted">N/A</span>{% endif %}
+                        </div>
+                        <div class="stat-sub">
+                            {% if stats.has_scores %}Median: {{ stats.median_score }}{% else %}Column not set{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Highest Score -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-purple">
+                    <div class="stat-icon"><i class="bi bi-graph-up-arrow"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">Highest Score</div>
+                        <div class="stat-value">
+                            {% if stats.has_scores %}{{ stats.max_score }}{% else %}<span class="fs-4 text-muted">N/A</span>{% endif %}
+                        </div>
+                        <div class="stat-sub">
+                            {% if stats.has_scores %}Min: {{ stats.min_score }}{% else %}Select score column{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Average Attendance -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-teal">
+                    <div class="stat-icon"><i class="bi bi-calendar-check-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">Avg. Attendance</div>
+                        <div class="stat-value">
+                            {% if stats.has_attendance %}{{ stats.avg_attendance }}%{% else %}<span class="fs-4 text-muted">N/A</span>{% endif %}
+                        </div>
+                        <div class="stat-sub">
+                            {% if stats.has_attendance %}Max: {{ stats.max_attendance }}%{% else %}Column not set{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pass Percentage -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-warning">
+                    <div class="stat-icon"><i class="bi bi-check2-circle"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">Pass Rate</div>
+                        <div class="stat-value">
+                            {% if stats.has_scores %}{{ stats.pass_percentage }}%{% else %}<span class="fs-4 text-muted">N/A</span>{% endif %}
+                        </div>
+                        <div class="stat-sub">
+                            {% if stats.has_scores %}{{ stats.pass_count }} Students Passed{% else %}Requires score column{% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- At-Risk Students -->
+            <div class="col-sm-6 col-lg-3 col-xl-2">
+                <div class="stat-card stat-danger">
+                    <div class="stat-icon"><i class="bi bi-exclamation-triangle-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-label">At-Risk Students</div>
+                        <div class="stat-value">
+                            {% if stats.at_risk_count is not none %}{{ stats.at_risk_count }}{% else %}<span class="fs-4 text-muted">N/A</span>{% endif %}
+                        </div>
+                        <div class="stat-sub">Att &lt; 75% &amp; Score &lt; 60</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Visualizations Grid -->
+        <div class="row g-4 mb-4">
+            <div class="col-12">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h5 class="fw-bold mb-0">
+                        <i class="bi bi-bar-chart-fill text-primary me-2"></i>Performance Visualizations
+                    </h5>
+                    <span class="text-muted small">Generated with Matplotlib &amp; Seaborn from actual dataset values</span>
+                </div>
+            </div>
+
+            <!-- 1. Subject-wise Average Marks -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-bar-chart text-primary"></i> 1. Subject-wise Average Marks</h6>
+                        {% if 'subject_averages' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['subject_averages'] }}', 'Subject-wise Average Marks')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'subject_averages' in charts %}
+                        <img src="{{ charts['subject_averages'] }}" alt="Subject-wise Average Marks" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Subject-wise Average Marks')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Subject chart unavailable</p>
+                            <small>Requires at least 2 subject/score columns. Configure subject columns in <a href="#" data-bs-toggle="modal" data-bs-target="#columnMappingModal">Column Settings</a>.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. Student Score Distribution -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-bell-fill text-success"></i> 2. Student Score Distribution</h6>
+                        {% if 'score_distribution' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['score_distribution'] }}', 'Student Score Distribution')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'score_distribution' in charts %}
+                        <img src="{{ charts['score_distribution'] }}" alt="Score Distribution" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Student Score Distribution')">
+                        {% elif 'generic_distribution' in charts %}
+                        <img src="{{ charts['generic_distribution'] }}" alt="Numerical Distribution" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Numerical Feature Distribution')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Score distribution chart unavailable</p>
+                            <small>Requires a numerical score column.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. Attendance Analysis -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-calendar2-range text-teal"></i> 3. Attendance Analysis</h6>
+                        {% if 'attendance_analysis' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['attendance_analysis'] }}', 'Attendance Analysis')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'attendance_analysis' in charts %}
+                        <img src="{{ charts['attendance_analysis'] }}" alt="Attendance Distribution" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Attendance Analysis')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Attendance chart unavailable</p>
+                            <small>No attendance column detected. Map your attendance column in <a href="#" data-bs-toggle="modal" data-bs-target="#columnMappingModal">Column Settings</a>.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. Attendance vs Academic Performance -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-scatter-chart text-purple"></i> 4. Attendance vs. Academic Performance</h6>
+                        {% if 'attendance_vs_score' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['attendance_vs_score'] }}', 'Attendance vs Performance')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'attendance_vs_score' in charts %}
+                        <img src="{{ charts['attendance_vs_score'] }}" alt="Attendance vs Academic Performance" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Attendance vs Academic Performance')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Scatter plot unavailable</p>
+                            <small>Requires both an Attendance column and a Score column to compute correlation.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Top-Performing Students -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-trophy text-warning"></i> 5. Top-Performing Students</h6>
+                        {% if 'top_students' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['top_students'] }}', 'Top Performing Students')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'top_students' in charts %}
+                        <img src="{{ charts['top_students'] }}" alt="Top Students" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Top Performing Students')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Top performers chart unavailable</p>
+                            <small>Requires a Student Name/ID column and a Score column.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. Correlation Heatmap -->
+            <div class="col-lg-6">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h6 class="dash-card-title"><i class="bi bi-grid-3x3-gap text-danger"></i> 6. Correlation Matrix Heatmap</h6>
+                        {% if 'correlation_heatmap' in charts %}
+                        <button class="btn btn-sm btn-link text-decoration-none p-0" onclick="openZoomModal('{{ charts['correlation_heatmap'] }}', 'Correlation Heatmap')">
+                            <i class="bi bi-zoom-in"></i> Zoom
+                        </button>
+                        {% endif %}
+                    </div>
+                    <div class="dash-card-body chart-box">
+                        {% if 'correlation_heatmap' in charts %}
+                        <img src="{{ charts['correlation_heatmap'] }}" alt="Correlation Heatmap" class="img-fluid cursor-pointer" onclick="openZoomModal(this.src, 'Correlation Heatmap')">
+                        {% else %}
+                        <div class="chart-empty-placeholder">
+                            <i class="bi bi-info-circle fs-3 d-block mb-2"></i>
+                            <p class="mb-1 fw-medium">Correlation matrix unavailable</p>
+                            <small>Requires at least 2 numerical columns in the dataset.</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Dataset Preview Table (First 10 Rows) -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h5 class="dash-card-title">
+                            <i class="bi bi-table text-primary"></i> Data Preview (First 10 Rows)
+                        </h5>
+                        <span class="badge text-bg-light border text-muted">Showing 10 of {{ preview.total_rows }} rows &bull; {{ preview.total_cols }} columns</span>
+                    </div>
+                    <div class="dash-card-body p-0">
+                        <div class="table-responsive table-responsive-custom">
+                            <table class="table table-hover table-custom align-middle">
+                                <thead>
+                                    <tr>
+                                        <th class="ps-3 text-muted">#</th>
+                                        {% for col in preview.columns %}
+                                        <th>
+                                            <div>{{ col }}</div>
+                                            <span class="type-badge">{{ preview.dtypes[col] }}</span>
+                                        </th>
+                                        {% endfor %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in preview.rows %}
+                                    <tr>
+                                        <td class="ps-3 text-muted fw-semibold">{{ loop.index }}</td>
+                                        {% for val in row %}
+                                        <td>{{ val }}</td>
+                                        {% endfor %}
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 5: Numerical Descriptive Statistics Table -->
+        {% if stats.descriptive_stats %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <h5 class="dash-card-title">
+                            <i class="bi bi-calculator text-primary"></i> Numerical Features Summary Statistics
+                        </h5>
+                    </div>
+                    <div class="dash-card-body p-0">
+                        <div class="table-responsive table-responsive-custom">
+                            <table class="table table-striped table-hover table-custom align-middle text-end">
+                                <thead>
+                                    <tr>
+                                        <th class="text-start ps-3">Feature Column</th>
+                                        <th>Count</th>
+                                        <th>Mean</th>
+                                        <th>Std Dev</th>
+                                        <th>Min</th>
+                                        <th>25%</th>
+                                        <th>50% (Median)</th>
+                                        <th>75%</th>
+                                        <th class="pe-3">Max</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for col, metrics in stats.descriptive_stats.items() %}
+                                    <tr>
+                                        <td class="text-start ps-3 fw-semibold text-primary">{{ col }}</td>
+                                        <td>{{ metrics['count']|int }}</td>
+                                        <td class="fw-bold">{{ metrics['mean'] }}</td>
+                                        <td>{{ metrics['std'] }}</td>
+                                        <td>{{ metrics['min'] }}</td>
+                                        <td>{{ metrics['25%'] }}</td>
+                                        <td class="fw-medium text-success">{{ metrics['50%'] }}</td>
+                                        <td>{{ metrics['75%'] }}</td>
+                                        <td class="pe-3 fw-bold">{{ metrics['max'] }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% endif %}
+
+    </main>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Modal 1: Column Mapping Customization Modal -->
+    {% if has_data %}
+    <div class="modal fade" id="columnMappingModal" tabindex="-1" aria-labelledby="columnMappingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <form action="{{ url_for('update_columns') }}" method="POST">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="columnMappingModalLabel">
+                            <i class="bi bi-sliders text-primary me-2"></i>Customize Dataset Column Mapping
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="text-muted small mb-4">
+                            If your CSV uses custom or non-standard column headers, select which columns correspond to student names, attendance, and scores. The charts and statistical metrics will update automatically.
+                        </p>
+
+                        <div class="row g-3">
+                            <!-- Student Identifier / Name -->
+                            <div class="col-md-6">
+                                <label for="studentColSelect" class="form-label fw-semibold">Student Identifier / Name Column</label>
+                                <select class="form-select" name="student_col" id="studentColSelect">
+                                    <option value="">-- None / Auto-detect --</option>
+                                    {% for col in preview.columns %}
+                                    <option value="{{ col }}" {% if mapping.student_col == col %}selected{% endif %}>{{ col }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Used for identifying individual student records and top performers.</small>
+                            </div>
+
+                            <!-- Attendance Column -->
+                            <div class="col-md-6">
+                                <label for="attendanceColSelect" class="form-label fw-semibold">Attendance Percentage Column</label>
+                                <select class="form-select" name="attendance_col" id="attendanceColSelect">
+                                    <option value="">-- None / Unavailable --</option>
+                                    {% for col in stats.numeric_columns %}
+                                    <option value="{{ col }}" {% if mapping.attendance_col == col %}selected{% endif %}>{{ col }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Used for attendance distribution, at-risk alerts, and correlation.</small>
+                            </div>
+
+                            <!-- Overall Score Column -->
+                            <div class="col-md-6">
+                                <label for="scoreColSelect" class="form-label fw-semibold">Overall / Average Score Column</label>
+                                <select class="form-select" name="score_col" id="scoreColSelect">
+                                    <option value="">-- Auto-calculate from subjects --</option>
+                                    {% for col in stats.numeric_columns %}
+                                    <option value="{{ col }}" {% if mapping.score_col == col %}selected{% endif %}>{{ col }}</option>
+                                    {% endfor %}
+                                </select>
+                                <small class="text-muted">Main score metric for distribution, grade categories, and pass rate.</small>
+                            </div>
+
+                            <!-- Subject Columns (Multi-select Checkboxes) -->
+                            <div class="col-12 mt-3">
+                                <label class="form-label fw-semibold mb-2">Subject Columns (Select all that apply)</label>
+                                <div class="row g-2 p-3 rounded border bg-body-tertiary">
+                                    {% for col in stats.numeric_columns %}
+                                    {% if col != mapping.attendance_col and col != mapping.student_col %}
+                                    <div class="col-sm-6 col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="subject_cols" value="{{ col }}" id="sub_{{ loop.index }}" {% if col in mapping.subject_cols %}checked{% endif %}>
+                                            <label class="form-check-label" for="sub_{{ loop.index }}">
+                                                {{ col }}
+                                            </label>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <small class="text-muted">Used for the Subject-wise Average Marks bar chart.</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> Save Column Mappings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Modal 2: Chart Zoom Modal -->
+    <div class="modal fade" id="chartZoomModal" tabindex="-1" aria-labelledby="chartZoomModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold" id="chartZoomModalLabel">Visualization View</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center p-3">
+                    <img id="modalZoomImg" src="" alt="Zoomed Chart" class="img-fluid rounded">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= FOOTER ================= -->
+    <footer class="footer text-center">
+        <div class="container">
+            <p class="mb-1 fw-medium">Student Performance Analyzer &bull; Built with Flask, Pandas, NumPy, Matplotlib &amp; Seaborn</p>
+            <p class="text-muted small mb-0">&copy; 2026 Academic Data Analytics Project. Simple, Transparent &amp; Interactive.</p>
+        </div>
+    </footer>
+
+    <!-- Bootstrap 5.3 Bundle JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom Client-side Scripts -->
+    <script>
+        // ---------------- Theme Toggle (Light / Dark) ----------------
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const themeIcon = document.getElementById('themeIcon');
+        const htmlElement = document.documentElement;
+
+        // Initialize from localStorage or default to light
+        const savedTheme = localStorage.getItem('spa_theme') || 'light';
+        htmlElement.setAttribute('data-bs-theme', savedTheme);
+        updateThemeIcon(savedTheme);
+
+        if (themeToggleBtn) {
+            themeToggleBtn.addEventListener('click', () => {
+                const currentTheme = htmlElement.getAttribute('data-bs-theme');
+                const nextTheme = currentTheme === 'light' ? 'dark' : 'light';
+                htmlElement.setAttribute('data-bs-theme', nextTheme);
+                localStorage.setItem('spa_theme', nextTheme);
+                updateThemeIcon(nextTheme);
+            });
+        }
+
+        function updateThemeIcon(theme) {
+            if (!themeIcon) return;
+            if (theme === 'dark') {
+                themeIcon.classList.remove('bi-moon-stars-fill');
+                themeIcon.classList.add('bi-sun-fill');
+            } else {
+                themeIcon.classList.remove('bi-sun-fill');
+                themeIcon.classList.add('bi-moon-stars-fill');
+            }
+        }
+
+        // ---------------- Drag & Drop Upload Zone ----------------
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('csvFileInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const selectedFileName = document.getElementById('selectedFileName');
+
+        if (dropzone && fileInput) {
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('dragover');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('dragover');
+                }, false);
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+                if (files.length > 0) {
+                    fileInput.files = files;
+                    handleFileSelection(files[0]);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (fileInput.files.length > 0) {
+                    handleFileSelection(fileInput.files[0]);
+                }
+            });
+        }
+
+        function handleFileSelection(file) {
+            if (!file.name.toLowerCase().endsWith('.csv')) {
+                alert('Please upload a valid .csv file.');
+                if (fileInput) fileInput.value = '';
+                if (submitBtn) submitBtn.disabled = true;
+                if (selectedFileName) selectedFileName.textContent = '';
+                return;
+            }
+            if (selectedFileName) {
+                const sizeKb = (file.size / 1024).toFixed(1);
+                selectedFileName.innerHTML = `<i class="bi bi-file-earmark-check-fill text-success me-1"></i> Selected: <strong>${file.name}</strong> (${sizeKb} KB)`;
+            }
+            if (submitBtn) {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // ---------------- Chart Zoom Modal ----------------
+        function openZoomModal(imgSrc, title) {
+            const modalImg = document.getElementById('modalZoomImg');
+            const modalTitle = document.getElementById('chartZoomModalLabel');
+            if (modalImg) modalImg.src = imgSrc;
+            if (modalTitle) modalTitle.textContent = title;
+            const zoomModal = new bootstrap.Modal(document.getElementById('chartZoomModal'));
+            zoomModal.show();
+        }
+    </script>
+</body>
+</html>

@@ -14,3 +14,7 @@ venv/
 .venv/
 env/
 ENV/
+
+# Uploaded and temporary files
+uploads/
+*.tmp
